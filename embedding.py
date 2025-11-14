@@ -2,6 +2,8 @@ import os
 from typing import List
 
 import numpy as np
+from langchain_openai import OpenAIEmbeddings  # type: ignore
+import httpx  # type: ignore
 
 # Support both OpenAI SDK styles:
 # - v1.x: from openai import OpenAI
@@ -55,46 +57,23 @@ def _maybe_load_dotenv() -> None:
 
 class Embedder:
     def __init__(self, batch_size: int = 256) -> None:
-        if _OPENAI_STYLE == "none":
-            raise RuntimeError("OpenAI package not installed. Run: pip install --upgrade openai")
         # Try to populate env from .env if present
         _maybe_load_dotenv()
         api_key = os.getenv("OPENAI_API_KEY", "")
         if not api_key:
             raise RuntimeError("OPENAI_API_KEY not set. Please set it in environment or .env")
-        base_url = os.getenv("OPENAI_BASE_URL", "").strip()
-        # Allow overriding embedding model via env
+        base_url = os.getenv("OPENAI_BASE_URL", "").strip() or None
         env_model = os.getenv("EMBEDDING_MODEL") or os.getenv("OPENAI_EMBEDDING_MODEL")
-        # Force-disable TLS verification (enterprise TLS interception)
-        verify_ssl = False
-
         self.batch_size = batch_size
         self._openai_embed_model = env_model or "text-embedding-3-small"
-        if _OPENAI_STYLE == "v1":
-            # v1 client supports base_url and http_client (for verify control)
-            http_client = None
-            try:
-                import httpx  # type: ignore
-                http_client = httpx.Client(verify=False)
-            except Exception:
-                http_client = None
-            client_kwargs = {"api_key": api_key}
-            if base_url:
-                client_kwargs["base_url"] = base_url
-            if http_client is not None:
-                client_kwargs["http_client"] = http_client  # type: ignore[assignment]
-            self._client = OpenAI(**client_kwargs)  # type: ignore[arg-type]
-            self._legacy = False
-        else:
-            # legacy 0.x
-            import openai  # type: ignore
-
-            openai.api_key = api_key
-            if base_url:
-                openai.api_base = base_url
-            # Legacy SDK doesn't accept http_client; consider proper CA config if verify fails
-            self._legacy = True
-            self._openai_mod = openai
+        # LangChain embeddings with enterprise endpoint and TLS verify disabled
+        http_client = httpx.Client(verify=False)
+        self._lc_embeddings = OpenAIEmbeddings(
+            api_key=api_key,
+            base_url=base_url,
+            model=self._openai_embed_model,
+            http_client=http_client,
+        )
 
     @property
     def name(self) -> str:
@@ -103,19 +82,11 @@ class Embedder:
     def embed_texts(self, texts: List[str]) -> np.ndarray:
         if not texts:
             return np.zeros((0, 1536), dtype=np.float32)
-        try:
-            if self._legacy:
-                res = self._openai_mod.Embedding.create(input=texts, model=self._openai_embed_model)
-                vectors = [d["embedding"] for d in res["data"]]
-            else:
-                result = self._client.embeddings.create(input=texts, model=self._openai_embed_model)
-                vectors = [d.embedding for d in result.data]
-            return np.array(vectors, dtype=np.float32)
-        except Exception as e:
-            raise RuntimeError(f"OpenAI embedding failed: {e}") from e
+        vectors = self._lc_embeddings.embed_documents(texts)
+        return np.array(vectors, dtype=np.float32)
 
     def embed_query(self, text: str) -> np.ndarray:
-        embs = self.embed_texts([text])
-        return embs[0] if embs.shape[0] else np.zeros((1536,), dtype=np.float32)
+        vec = self._lc_embeddings.embed_query(text)
+        return np.array(vec, dtype=np.float32)
 
 

@@ -5,13 +5,14 @@ from typing import Any, Dict, List, Optional, Tuple
 
 from .vector_store import RetrievedChunk
 
-_OPENAI_AVAILABLE = False
+_LLM_AVAILABLE = False
 try:
-    from openai import OpenAI  # type: ignore
+    from langchain_openai import ChatOpenAI  # type: ignore
+    import httpx  # type: ignore
 
-    _OPENAI_AVAILABLE = True
+    _LLM_AVAILABLE = True
 except Exception:
-    _OPENAI_AVAILABLE = False
+    _LLM_AVAILABLE = False
 
 
 def _priority_rank(md: Dict[str, Any]) -> int:
@@ -100,30 +101,15 @@ def synthesize_checklist_with_llm(
     model: Optional[str] = None,
     max_items: int = 10,
 ) -> List[Dict[str, str]]:
-    if not _OPENAI_AVAILABLE:
+    if not _LLM_AVAILABLE:
         return synthesize_checklist_rule_based(query, retrieved, severity=severity, max_items=max_items)
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key:
         return synthesize_checklist_rule_based(query, retrieved, severity=severity, max_items=max_items)
-    # Resolve base_url and verify toggle
     base_url = os.getenv("OPENAI_BASE_URL", "").strip() or None
-    # Force-disable TLS verification for enterprise TLS interception scenarios
-    verify_ssl = False
-    # Select model from env if not provided
     model = model or os.getenv("LLM_MODEL") or os.getenv("OPENAI_CHAT_MODEL") or "gpt-4o-mini"
-    # Build client with optional httpx verify control
-    http_client = None
-    try:
-        import httpx  # type: ignore
-        http_client = httpx.Client(verify=False)
-    except Exception:
-        http_client = None
-    client_kwargs = {"api_key": api_key}
-    if base_url:
-        client_kwargs["base_url"] = base_url
-    if http_client is not None:
-        client_kwargs["http_client"] = http_client  # type: ignore[assignment]
-    client = OpenAI(**client_kwargs)  # type: ignore[arg-type]
+    http_client = httpx.Client(verify=False)
+    llm = ChatOpenAI(api_key=api_key, base_url=base_url, model=model, http_client=http_client)
     context_blocks = []
     for r in retrieved[:15]:
         ref = _format_reference(r.metadata)
@@ -139,12 +125,8 @@ def synthesize_checklist_with_llm(
         f"Context:\n{context_text}"
     )
     try:
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[{"role": "user", "content": prompt}],
-            temperature=0.2,
-        )
-        text = resp.choices[0].message.content or ""
+        resp = llm.invoke(prompt)
+        text = getattr(resp, "content", "") or ""
     except Exception:
         return synthesize_checklist_rule_based(query, retrieved, severity=severity, max_items=max_items)
     # Simple parse: convert bullet-like lines into structured items
