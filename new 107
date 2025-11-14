@@ -1,0 +1,11 @@
+Suggested prompts to test with current data
+payments-api 5xx spike after deploy, alert=HTTP5xxRateHigh, severity=P1. Give step-by-step with rollback and verification.
+payments-db latency p95>200ms with timeouts, alert=DBLatencyHigh. Immediate actions to stabilize and verify success.
+Kafka orders-consumer lag>50k, alert=ConsumerLagHigh. Remediation steps with kubectl commands and post-checks.
+file-service disk usage >85%, alert=DiskUsageHigh. Free space safely now and prevent recurrence; include rollback if any.
+payments-api logs show TimeoutException to orders; 5xx>3%. Diagnose root cause and short-term mitigation.
+We need to rollback payments-api to the last stable version. Provide exact commands, verification for 10m, and next steps.
+Scale payments-db read replicas by +1 to reduce read latency. Give command, verification criteria, and rollback.
+Throttle slow queries >1s in db-proxy to relieve DB. Provide command, how to verify improvement, and how to undo.
+For app 5xx spike, check error code distribution and dependency timeouts. List diagnosis commands and expected findings.
+After mitigating app 5xx, what should we monitor for the next 10 minutes to confirm recovery and avoid regressions?
