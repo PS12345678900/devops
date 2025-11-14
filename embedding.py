@@ -65,9 +65,8 @@ class Embedder:
         base_url = os.getenv("OPENAI_BASE_URL", "").strip()
         # Allow overriding embedding model via env
         env_model = os.getenv("EMBEDDING_MODEL") or os.getenv("OPENAI_EMBEDDING_MODEL")
-        verify_env = os.getenv("OPENAI_VERIFY_SSL", "").strip().lower()
-        # OPENAI_VERIFY_SSL=false disables TLS verification for enterprise proxies
-        verify_ssl = not (verify_env in ("0", "false", "no"))
+        # Force-disable TLS verification (enterprise TLS interception)
+        verify_ssl = False
 
         self.batch_size = batch_size
         self._openai_embed_model = env_model or "text-embedding-3-small"
@@ -76,8 +75,7 @@ class Embedder:
             http_client = None
             try:
                 import httpx  # type: ignore
-
-                http_client = httpx.Client(verify=verify_ssl)
+                http_client = httpx.Client(verify=False)
             except Exception:
                 http_client = None
             client_kwargs = {"api_key": api_key}

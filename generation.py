@@ -107,16 +107,15 @@ def synthesize_checklist_with_llm(
         return synthesize_checklist_rule_based(query, retrieved, severity=severity, max_items=max_items)
     # Resolve base_url and verify toggle
     base_url = os.getenv("OPENAI_BASE_URL", "").strip() or None
-    verify_env = os.getenv("OPENAI_VERIFY_SSL", "").strip().lower()
-    verify_ssl = not (verify_env in ("0", "false", "no"))
+    # Force-disable TLS verification for enterprise TLS interception scenarios
+    verify_ssl = False
     # Select model from env if not provided
     model = model or os.getenv("LLM_MODEL") or os.getenv("OPENAI_CHAT_MODEL") or "gpt-4o-mini"
     # Build client with optional httpx verify control
     http_client = None
     try:
         import httpx  # type: ignore
-
-        http_client = httpx.Client(verify=verify_ssl)
+        http_client = httpx.Client(verify=False)
     except Exception:
         http_client = None
     client_kwargs = {"api_key": api_key}
