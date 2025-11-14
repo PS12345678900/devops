@@ -35,6 +35,14 @@ def _load_dotenv_from_root() -> None:
 
 _load_dotenv_from_root()
 
+# Defensive: clear cert envs that can break SSL context on some Windows setups
+for _v in ("SSL_CERT_FILE", "SSL_CERT_DIR"):
+    if os.environ.get(_v):
+        try:
+            os.environ.pop(_v, None)
+        except Exception:
+            pass
+
 from app.generation import synthesize_checklist_rule_based, synthesize_checklist_with_llm
 from app.keyword_search import keyword_retrieve
 
@@ -50,7 +58,7 @@ st.caption("Ask questions grounded in your uploaded/bundled playbooks and runboo
 def sidebar_controls() -> Dict[str, Any]:
     st.sidebar.header("Settings")
     top_k = st.sidebar.number_input("Top K", min_value=5, max_value=50, value=20, step=1)
-    use_llm = st.sidebar.checkbox("Use OpenAI for synthesis", value=True)
+    use_llm = st.sidebar.checkbox("Use OpenAI for synthesis", value=False)
     st.sidebar.markdown("---")
     st.sidebar.caption("Optional: set OPENAI_API_KEY for LLM synthesis (formatting).")
     return {

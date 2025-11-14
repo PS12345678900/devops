@@ -106,7 +106,10 @@ def synthesize_checklist_with_llm(
     api_key = os.getenv("OPENAI_API_KEY", "")
     if not api_key:
         return synthesize_checklist_rule_based(query, retrieved, severity=severity, max_items=max_items)
-    base_url = os.getenv("OPENAI_BASE_URL", "").strip() or None
+    raw_base = os.getenv("OPENAI_BASE_URL", "")
+    base_url = (raw_base or "").strip().strip('"').strip("'")
+    if not base_url or " " in base_url or not base_url.lower().startswith(("http://", "https://")):
+        base_url = None
     model = model or os.getenv("LLM_MODEL") or os.getenv("OPENAI_CHAT_MODEL") or "gpt-4o-mini"
     http_client = httpx.Client(verify=False)
     llm = ChatOpenAI(api_key=api_key, base_url=base_url, model=model, http_client=http_client)
